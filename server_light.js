@@ -1,8 +1,15 @@
-﻿const express = require('express');
+﻿const admin = require('firebase-admin');
+const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json()); // Middleware to parse JSON bodies
+
+const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+const db = admin.firestore();
 
 // Array to store the light values
 let lightValues = [];
@@ -13,11 +20,22 @@ app.post('/send-light-value', (req, res) => {
     // Store the received light value
     lightValues.push(lightValue);
 
-    res.status(200).send('Light value received');
+    const docRef = db.collection('lightValues').doc(); // Creates a new document in the 'lightValues' collection
+    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+
+    res.status(200).send('Light value received and stored in Firebase');
+});
 });
 
 // GET route to display the stored light values
 app.get('/light-values', (req, res) => {
+    res.status(200).json(lightValues);
+
+    const lightValues = [];
+    const snapshot = await db.collection('lightValues').get();
+    snapshot.forEach(doc => {
+        lightValues.push({ id: doc.id, ...doc.data() });
+    });
     res.status(200).json(lightValues);
 });
 
@@ -34,6 +52,11 @@ app.get('/updateLux', (req, res) => {
     lightValues.push(lux);
 
     res.status(200).send('Lux value received');
+
+    const docRef = db.collection('luxValues').doc(); // You can choose to store in the same or a different collection
+    await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+
+    res.status(200).send('Lux value received and stored in Firebase');
 });
 
 app.listen(PORT, () => {
