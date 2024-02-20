@@ -18,23 +18,37 @@ app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
 
-    // Store the received light value in Firestore
-    const docRef = db.collection('lightValues').doc(); // Creates a new document in the 'lightValues' collection
+    // Reference to the counter document
+    const counterRef = db.collection('counters').doc('lightValues');
+    const counterDoc = await counterRef.get();
+
+    let counter = 0;
+    if (counterDoc.exists) {
+        counter = counterDoc.data().count;
+    }
+
+    // Use the counter as the document ID
+    const docRef = db.collection('lightValues').doc(`${counter}`);
     await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-    res.status(200).send('Light value received and stored in Firebase');
+    // Increment the counter for the next document
+    await counterRef.set({ count: counter + 1 });
+
+    res.status(200).send(`Light value received and stored in Firebase with ID: ${counter}`);
 });
+
 
 
 // GET route to display the stored light values
 app.get('/light-values', async (req, res) => {
     const lightValues = [];
-    const snapshot = await db.collection('lightValues').get();
+    const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
     snapshot.forEach(doc => {
         lightValues.push({ id: doc.id, ...doc.data() });
     });
     res.status(200).json(lightValues);
 });
+
 
 
 // Route to handle GET requests to the root URL path
