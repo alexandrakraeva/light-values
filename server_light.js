@@ -26,6 +26,16 @@ app.get('/', (req, res) => {
     res.send('Server is running');
 });
 
+// Route to handle GET requests to update the Lux value
+app.get('/updateLux', (req, res) => {
+    const lux = req.query.lux; // Extract Lux value from query parameters
+    console.log(`Received Lux value: ${lux}`);
+    // Store the received Lux value
+    lightValues.push(lux);
+
+    res.status(200).send('Lux value received');
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
