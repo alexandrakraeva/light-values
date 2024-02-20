@@ -25,7 +25,7 @@ app.post('/send-light-value', (req, res) => {
 
     res.status(200).send('Light value received and stored in Firebase');
 });
-});
+
 
 // GET route to display the stored light values
 app.get('/light-values', (req, res) => {
