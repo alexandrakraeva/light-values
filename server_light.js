@@ -7,7 +7,6 @@ app.use(express.json()); // Middleware to parse JSON bodies
 // Array to store the light values
 let lightValues = [];
 
-// POST route to receive light values
 app.post('/send-light-value', (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
@@ -27,7 +26,7 @@ app.get('/', (req, res) => {
     res.send('Server is running');
 });
 
-// Route to handle GET requests to update the Lux value (optional)
+// Route to handle GET requests to update the Lux value
 app.get('/updateLux', (req, res) => {
     const lux = req.query.lux; // Extract Lux value from query parameters
     console.log(`Received Lux value: ${lux}`);
