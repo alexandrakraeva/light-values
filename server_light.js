@@ -21,6 +21,11 @@ app.get('/light-values', (req, res) => {
     res.status(200).json(lightValues);
 });
 
+// Route to handle GET requests to the root URL path
+app.get('/', (req, res) => {
+    res.send('Server is running');
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
