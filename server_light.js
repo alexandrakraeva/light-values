@@ -20,21 +20,27 @@ app.post('/send-light-value', async (req, res) => {
     const counterRef = db.collection('counters').doc('lightValues');
     const counterDoc = await counterRef.get();
 
-    let counter = 1; // Start counter from 1 if it doesn't exist
+    let counter = 1; // Default to 1 if counter document doesn't exist
     if (counterDoc.exists) {
         counter = counterDoc.data().count;
+        console.log(`Current counter value: ${counter}`); // Debug logging
+    } else {
+        console.log("Counter document doesn't exist. Starting from 1.");
     }
 
-    const docRef = db.collection('lightValues').doc(`${counter}`);
+    const docRef = db.collection('lightValues').doc(`${counter}`); // Explicitly setting document ID
     await docRef.set({
         value: lightValue,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    await counterRef.set({ count: counter + 1 });
+    await counterRef.set({ count: counter + 1 }); // Incrementing counter
+
+    console.log(`New counter value after increment: ${counter + 1}`); // Debug logging
 
     res.status(200).send(`Light value received and stored in Firebase with ID: ${counter}`);
 });
+
 
 app.get('/light-values', async (req, res) => {
     const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
