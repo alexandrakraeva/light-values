@@ -1,5 +1,5 @@
-﻿const express = require('express'); // framework to create web server
-const admin = require('firebase-admin'); //firebase servises - database
+﻿const express = require('express'); // Framework to create web server
+const admin = require('firebase-admin'); // Firebase services - database
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,32 +20,24 @@ app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
 
-
-
-
-    // generate new session ID for each connection
+    // Generate new session ID for each connection
     const sessionId = require('uuid').v4();
-    
+
     // Initialize the counter for this session
     sessionCounters[sessionId] = 0;
-
-
 
     let luxId = sessionCounters[sessionId]++;
     const luxCollection = db.collection(sessionId);
     luxCollection.doc(luxId.toString()).set({
-        ...data,
-        // add server-generated time-stamp
+        lightValue, // Assuming you want to store the light value in Firestore. Replace `lightValue` with the actual data object if different
+        // Add server-generated timestamp
         timestamp: admin.firestore.FieldValue.serverTimestamp()
     })
-
         .then(() => console.log('Data was added to Firestore successfully.'))
         .catch((error) => console.error('Error adding document to Firestore:', error));
+
+    // Removed the extra closing brace from here
 });
-
-});
-
-
 
 // GET route to display the stored light values
 app.get('/light-values', async (req, res) => {
@@ -56,8 +48,6 @@ app.get('/light-values', async (req, res) => {
     });
     res.status(200).json(lightValues);
 });
-
-
 
 // Route to handle GET requests to the root URL path
 app.get('/', (req, res) => {
