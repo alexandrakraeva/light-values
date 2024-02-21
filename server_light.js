@@ -1,5 +1,9 @@
 ﻿const express = require('express');
-const admin = require('firebase-admin');
+
+const socketIo = require('socket.io'); // websocketing
+const admin = require('firebase-admin'); //firebase servises - database
+const path = require('path'); // to transform file path
+const { Parser } = require('json2csv'); // convert json to csv to save
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +16,40 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
+
+let sessionCounters = {};
+
+io.on('connection', (socket) => {
+    console.log('A user connected');
+    // generate new session ID for each connection
+    const sessionId = require('uuid').v4();
+    socket.emit('sessionInit', { sessionId });
+    // Initialize the counter for this session
+    sessionCounters[sessionId] = 0;
+
+    // listen for th elocation updates from client side
+    socket.on('luxUpdate', (data) => {
+        console.log(data);
+        // generate a unique location ID for this session
+        let luxId = sessionCounters[sessionId]++;
+        // reference which collection to save locatations to in firebase
+        const luxCollection = db.collection(sessionId);
+        // add received location data to firebase, using location ID as document ID
+        luxCollection.doc(luxId.toString()).set({
+            ...data,
+            // add server-generated time-stamp
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        })
+            .then(() => console.log('Data was added to Firestore successfully.'))
+            .catch((error) => console.error('Error adding document to Firestore:', error));
+    });
+
+    // listen for disconnect events
+    socket.on('disconnect', () => {
+        // Clean up the session counter when the user disconnects
+        delete sessionCounters[sessionId];
+    });
+});
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
