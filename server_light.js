@@ -25,7 +25,7 @@ app.post('/send-light-value', async (req, res) => {
 
     // generate new session ID for each connection
     const sessionId = require('uuid').v4();
-    socket.emit('sessionInit', { sessionId });
+    
     // Initialize the counter for this session
     sessionCounters[sessionId] = 0;
 
