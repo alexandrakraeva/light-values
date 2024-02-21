@@ -1,13 +1,10 @@
-﻿const express = require('express');
-const admin = require('firebase-admin');
-const path = require('path');
-const { Parser } = require('json2csv');
-const { v4: uuidv4 } = require('uuid'); // Import UUID to generate unique session IDs
+﻿const express = require('express'); // framework to create web server
+const admin = require('firebase-admin'); //firebase servises - database
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json()); // Middleware to parse JSON bodies
 
 const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
 admin.initializeApp({
@@ -15,43 +12,79 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-let sessionCounters = {};
+// Array to store the light values
+let globalSessionCounter = 0;
+let deviceSessions = {};
+let lightValues = [];
+
+async function updateSessionCounter() {
+    const sessionCounterRef = db.collection('counters').doc('sessionCounter');
+    const sessionCounterDoc = await sessionCounterRef.get();
+    let sessionCount = 0;
+
+    if (sessionCounterDoc.exists) {
+        sessionCount = sessionCounterDoc.data().count;
+    }
+
+    // Increment the session counter
+    await sessionCounterRef.set({ count: sessionCount + 1 });
+
+    return sessionCount + 1; // Return the new session count
+}
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
-    const deviceId = req.body.deviceId; // Assume the device sends its identifier
+    console.log(`Received light value: ${lightValue}`);
 
-    if (!sessionCounters[deviceId]) {
-        // If this is the first value from the device, initialize a new session
-        sessionCounters[deviceId] = {
-            sessionId: uuidv4(), // Generate a unique session ID
-            counter: 0 // Initialize counter for the session
-        };
+    // Update session counter each time a new light value is sent
+    const sessionCount = await updateSessionCounter();
+
+    // Reference to the counter document for light values
+    const counterRef = db.collection('counters').doc('lightValues');
+    const counterDoc = await counterRef.get();
+
+    let counter = 0;
+    if (counterDoc.exists) {
+        counter = counterDoc.data().count;
     }
 
-    const sessionInfo = sessionCounters[deviceId];
-    console.log(`Received light value: ${lightValue} for session: ${sessionInfo.sessionId}`);
+    // Use the counter as the document ID for light values
+    const docRef = db.collection('lightValues').doc(`${counter}`);
+    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp(), sessionId: sessionCount });
 
-    // Use the session ID and counter as the document ID
-    const docRef = db.collection('lightValues').doc(`${sessionInfo.sessionId}_${sessionInfo.counter}`);
-    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+    // Increment the counter for the next document
+    await counterRef.set({ count: counter + 1 });
 
-    // Increment the counter for the next document within the same session
-    sessionInfo.counter += 1;
-
-    res.status(200).send(`Light value received and stored in Firebase with ID: ${sessionInfo.sessionId}_${sessionInfo.counter}`);
+    res.status(200).send(`Light value received and stored in Firebase with ID: ${counter}, Session ID: ${sessionCount}`);
 });
 
+
+// GET route to display the stored light values
 app.get('/light-values', async (req, res) => {
-    // Remaining routes as before...
+    const lightValues = [];
+    const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
+    snapshot.forEach(doc => {
+        lightValues.push({ id: doc.id, ...doc.data() });
+    });
+    res.status(200).json(lightValues);
 });
 
+// Route to handle GET requests to the root URL path
 app.get('/', (req, res) => {
-    // Remaining routes as before...
+    res.send('Server is running');
 });
 
+
+// Route to handle GET requests to update the Lux value
 app.get('/updateLux', async (req, res) => {
-    // Remaining routes as before...
+    const lux = req.query.lux;
+    console.log(`Received Lux value: ${lux}`);
+
+    // Store the received Lux value in Firestore
+    const docRef = db.collection('luxValues').doc(); // You can choose to store in the same or a different collection
+    await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+
+    res.status(200).send('Lux value received and stored in Firebase');
 });
 
 app.listen(PORT, () => {
