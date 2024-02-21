@@ -1,5 +1,6 @@
 ﻿const express = require('express');
 const admin = require('firebase-admin');
+const { v4: uuidv4 } = require('uuid'); // For generating unique session IDs
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,72 +13,29 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// Initialize the counter document if it doesn't exist
-const initializeCounter = async () => {
-    const counterRef = db.collection('counters').doc('lightValues');
-    const doc = await counterRef.get();
-    if (!doc.exists) {
-        await counterRef.set({ count: 0 });
+// Middleware to generate or retrieve session ID
+app.use((req, res, next) => {
+    let sessionId = req.headers['x-session-id'];
+    if (!sessionId) {
+        sessionId = uuidv4(); // Generate a new session ID if not provided
+        res.setHeader('X-Session-ID', sessionId);
     }
-};
-
-// Call the function to ensure the counter document is initialized
-initializeCounter();
+    req.sessionId = sessionId; // Attach the session ID to the request object
+    next();
+});
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
-    console.log(`Received light value: ${lightValue}`);
+    const sessionId = req.sessionId; // Retrieve the session ID from the request
+    console.log(`Received light value: ${lightValue} for session: ${sessionId}`);
 
-    // Use a transaction to read and increment the counter atomically
-    try {
-        const newDocId = await db.runTransaction(async (transaction) => {
-            const counterRef = db.collection('counters').doc('lightValues');
-            const counterDoc = await transaction.get(counterRef);
+    const docRef = db.collection('sessions').doc(sessionId).collection('lightValues').doc();
+    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-            let counter = 0;
-            if (counterDoc.exists) {
-                counter = counterDoc.data().count;
-            }
-
-            // Increment the counter
-            transaction.update(counterRef, { count: counter + 1 });
-
-            // Use the current counter value as the document ID
-            const docRef = db.collection('lightValues').doc(`${counter}`);
-            transaction.set(docRef, { value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
-
-            return counter; // Return the ID of the new document
-        });
-
-        res.status(200).send(`Light value received and stored in Firebase with ID: ${newDocId}`);
-    } catch (error) {
-        console.error("Transaction failed: ", error);
-        res.status(500).send('Failed to store light value');
-    }
+    res.status(200).send('Light value received and stored in Firebase');
 });
 
-app.get('/light-values', async (req, res) => {
-    const lightValues = [];
-    const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
-    snapshot.forEach(doc => {
-        lightValues.push({ id: doc.id, ...doc.data() });
-    });
-    res.status(200).json(lightValues);
-});
-
-app.get('/', (req, res) => {
-    res.send('Server is running');
-});
-
-app.get('/updateLux', async (req, res) => {
-    const lux = req.query.lux;
-    console.log(`Received Lux value: ${lux}`);
-
-    const docRef = db.collection('luxValues').doc();
-    await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
-
-    res.status(200).send('Lux value received and stored in Firebase');
-});
+// Additional endpoints should also use the session ID to store/retrieve data
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
