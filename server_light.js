@@ -1,10 +1,10 @@
-﻿const express = require('express');
-const admin = require('firebase-admin');
+﻿const express = require('express'); // framework to create web server
+const admin = require('firebase-admin'); //firebase servises - database
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json()); // Middleware to parse JSON bodies
 
 const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
 admin.initializeApp({
@@ -12,42 +12,68 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-let currentCollectionSuffix = 0; // Default starting suffix
+// Array to store the light values
+let lightValues = [];
+let sessionCounters = {};
 
-// Function to increment the collection suffix on server start
-async function incrementCollectionSuffix() {
-    const suffixRef = db.collection('system').doc('collectionSuffix');
-    const doc = await suffixRef.get();
-
-    if (doc.exists) {
-        currentCollectionSuffix = doc.data().suffix + 1;
-    } else {
-        currentCollectionSuffix = 1; // Start with 1 if it doesn't exist
-    }
-
-    // Update the suffix in Firestore for next server start
-    await suffixRef.set({ suffix: currentCollectionSuffix });
-}
-
-// Call this function when the server starts
-incrementCollectionSuffix().then(() => {
-    console.log(`Using collection suffix: ${currentCollectionSuffix}`);
-}).catch(console.error);
-
-// Modify your route to use the currentCollectionSuffix
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
 
-    // Use the current collection suffix in your document reference
-    const docRef = db.collection(`luxValues${currentCollectionSuffix}`).doc();
-    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-    res.status(200).send('Light value received and stored in Firebase');
+
+
+    // generate new session ID for each connection
+    const sessionId = require('uuid').v4();
+    socket.emit('sessionInit', { sessionId });
+    // Initialize the counter for this session
+    sessionCounters[sessionId] = 0;
+
+
+
+    let luxId = sessionCounters[sessionId]++;
+    const luxCollection = db.collection(sessionId);
+    luxCollection.doc(luxId.toString()).set({
+        ...data,
+        // add server-generated time-stamp
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+    })
+
+        .then(() => console.log('Data was added to Firestore successfully.'))
+        .catch((error) => console.error('Error adding document to Firestore:', error));
 });
 
+});
+
+
+
+// GET route to display the stored light values
+app.get('/light-values', async (req, res) => {
+    const lightValues = [];
+    const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
+    snapshot.forEach(doc => {
+        lightValues.push({ id: doc.id, ...doc.data() });
+    });
+    res.status(200).json(lightValues);
+});
+
+
+
+// Route to handle GET requests to the root URL path
 app.get('/', (req, res) => {
     res.send('Server is running');
+});
+
+// Route to handle GET requests to update the Lux value
+app.get('/updateLux', async (req, res) => {
+    const lux = req.query.lux;
+    console.log(`Received Lux value: ${lux}`);
+
+    // Store the received Lux value in Firestore
+    const docRef = db.collection('luxValues').doc(); // You can choose to store in the same or a different collection
+    await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+
+    res.status(200).send('Lux value received and stored in Firebase');
 });
 
 app.listen(PORT, () => {
