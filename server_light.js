@@ -1,6 +1,8 @@
 ﻿const express = require('express');
 const admin = require('firebase-admin');
-const { v4: uuidv4 } = require('uuid'); // For generating unique session IDs
+const path = require('path');
+const { Parser } = require('json2csv');
+const { v4: uuidv4 } = require('uuid'); // Import UUID to generate unique session IDs
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,29 +15,44 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// Middleware to generate or retrieve session ID
-app.use((req, res, next) => {
-    let sessionId = req.headers['x-session-id'];
-    if (!sessionId) {
-        sessionId = uuidv4(); // Generate a new session ID if not provided
-        res.setHeader('X-Session-ID', sessionId);
-    }
-    req.sessionId = sessionId; // Attach the session ID to the request object
-    next();
-});
+let sessionCounters = {};
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
-    const sessionId = req.sessionId; // Retrieve the session ID from the request
-    console.log(`Received light value: ${lightValue} for session: ${sessionId}`);
+    const deviceId = req.body.deviceId; // Assume the device sends its identifier
 
-    const docRef = db.collection('sessions').doc(sessionId).collection('lightValues').doc();
+    if (!sessionCounters[deviceId]) {
+        // If this is the first value from the device, initialize a new session
+        sessionCounters[deviceId] = {
+            sessionId: uuidv4(), // Generate a unique session ID
+            counter: 0 // Initialize counter for the session
+        };
+    }
+
+    const sessionInfo = sessionCounters[deviceId];
+    console.log(`Received light value: ${lightValue} for session: ${sessionInfo.sessionId}`);
+
+    // Use the session ID and counter as the document ID
+    const docRef = db.collection('lightValues').doc(`${sessionInfo.sessionId}_${sessionInfo.counter}`);
     await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-    res.status(200).send('Light value received and stored in Firebase');
+    // Increment the counter for the next document within the same session
+    sessionInfo.counter += 1;
+
+    res.status(200).send(`Light value received and stored in Firebase with ID: ${sessionInfo.sessionId}_${sessionInfo.counter}`);
 });
 
-// Additional endpoints should also use the session ID to store/retrieve data
+app.get('/light-values', async (req, res) => {
+    // Remaining routes as before...
+});
+
+app.get('/', (req, res) => {
+    // Remaining routes as before...
+});
+
+app.get('/updateLux', async (req, res) => {
+    // Remaining routes as before...
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
