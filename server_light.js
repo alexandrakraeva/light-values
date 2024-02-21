@@ -1,11 +1,10 @@
-﻿
-const express = require('express'); // framework to create web server
-const admin = require('firebase-admin'); //firebase servises - database
+﻿const express = require('express');
+const admin = require('firebase-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json()); // Middleware to parse JSON bodies
+app.use(express.json());
 
 const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
 admin.initializeApp({
@@ -13,35 +12,50 @@ admin.initializeApp({
 });
 const db = admin.firestore();
 
-// Array to store the light values
-let lightValues = [];
+// Initialize the counter document if it doesn't exist
+const initializeCounter = async () => {
+    const counterRef = db.collection('counters').doc('lightValues');
+    const doc = await counterRef.get();
+    if (!doc.exists) {
+        await counterRef.set({ count: 0 });
+    }
+};
+
+// Call the function to ensure the counter document is initialized
+initializeCounter();
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
 
-    // Reference to the counter document
-    const counterRef = db.collection('counters').doc('lightValues');
-    const counterDoc = await counterRef.get();
+    // Use a transaction to read and increment the counter atomically
+    try {
+        const newDocId = await db.runTransaction(async (transaction) => {
+            const counterRef = db.collection('counters').doc('lightValues');
+            const counterDoc = await transaction.get(counterRef);
 
-    let counter = 0;
-    if (counterDoc.exists) {
-        counter = counterDoc.data().count;
+            let counter = 0;
+            if (counterDoc.exists) {
+                counter = counterDoc.data().count;
+            }
+
+            // Increment the counter
+            transaction.update(counterRef, { count: counter + 1 });
+
+            // Use the current counter value as the document ID
+            const docRef = db.collection('lightValues').doc(`${counter}`);
+            transaction.set(docRef, { value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
+
+            return counter; // Return the ID of the new document
+        });
+
+        res.status(200).send(`Light value received and stored in Firebase with ID: ${newDocId}`);
+    } catch (error) {
+        console.error("Transaction failed: ", error);
+        res.status(500).send('Failed to store light value');
     }
-
-    // Use the counter as the document ID
-    const docRef = db.collection('lightValues').doc(`${counter}`);
-    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
-
-    // Increment the counter for the next document
-    await counterRef.set({ count: counter + 1 });
-
-    res.status(200).send(`Light value received and stored in Firebase with ID: ${counter}`);
 });
 
-
-
-// GET route to display the stored light values
 app.get('/light-values', async (req, res) => {
     const lightValues = [];
     const snapshot = await db.collection('lightValues').orderBy(admin.firestore.FieldPath.documentId()).get();
@@ -51,20 +65,15 @@ app.get('/light-values', async (req, res) => {
     res.status(200).json(lightValues);
 });
 
-
-
-// Route to handle GET requests to the root URL path
 app.get('/', (req, res) => {
     res.send('Server is running');
 });
 
-// Route to handle GET requests to update the Lux value
 app.get('/updateLux', async (req, res) => {
     const lux = req.query.lux;
     console.log(`Received Lux value: ${lux}`);
 
-    // Store the received Lux value in Firestore
-    const docRef = db.collection('luxValues').doc(); // You can choose to store in the same or a different collection
+    const docRef = db.collection('luxValues').doc();
     await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
     res.status(200).send('Lux value received and stored in Firebase');
