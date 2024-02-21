@@ -6,8 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-const serviceAccount = require('./path-to-your-firebase-adminsdk.json');
-
+const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
 });
