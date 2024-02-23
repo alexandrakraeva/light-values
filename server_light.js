@@ -1,5 +1,6 @@
 ﻿const express = require('express'); // framework to create web server
 const admin = require('firebase-admin'); //firebase servises - database
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -60,13 +61,15 @@ app.get('/', (req, res) => {
 // Route to handle GET requests to update the Lux value
 app.get('/updateLux', async (req, res) => {
     const lux = req.query.lux;
-    console.log(`Received Lux value: ${lux}`);
+    const sessionId = req.query.sessionId || uuidv4(); // Use provided session ID or generate a new one
 
-    // Store the received Lux value in Firestore
-    const docRef = db.collection('luxValues').doc(); // You can choose to store in the same or a different collection
+    console.log(`Received Lux value: ${lux} for session: ${sessionId}`);
+
+    // Store the received Lux value in Firestore under a session-specific path
+    const docRef = db.collection('sessions').doc(sessionId).collection('luxValues').doc();
     await docRef.set({ value: lux, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-    res.status(200).send('Lux value received and stored in Firebase');
+    res.status(200).send(`Lux value received and stored in Firebase for session: ${sessionId}`);
 });
 
 app.listen(PORT, () => {
