@@ -9,7 +9,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json()); // Middleware to parse JSON bodies
+app.use(express.static('public')); // Middleware to parse JSON bodies
 
 // Initialize Firebase Admin with your service account
 const serviceAccount = require('./xref-lux-values-firebase-adminsdk-puayh-d190ccc1e1.json');
