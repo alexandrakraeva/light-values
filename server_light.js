@@ -1,5 +1,5 @@
-﻿const express = require('express'); // Framework to create web server
-const admin = require('firebase-admin'); // Firebase services - database
+﻿const express = require('express'); // framework to create web server
+const admin = require('firebase-admin'); //firebase servises - database
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,30 +14,31 @@ const db = admin.firestore();
 
 // Array to store the light values
 let lightValues = [];
-let sessionCounters = {};
 
 app.post('/send-light-value', async (req, res) => {
     const lightValue = req.body.lightValue;
     console.log(`Received light value: ${lightValue}`);
 
-    // Generate new session ID for each connection
-    const sessionId = require('uuid').v4();
+    // Reference to the counter document
+    const counterRef = db.collection('counters').doc('lightValues');
+    const counterDoc = await counterRef.get();
 
-    // Initialize the counter for this session
-    sessionCounters[sessionId] = 0;
+    let counter = 0;
+    if (counterDoc.exists) {
+        counter = counterDoc.data().count;
+    }
 
-    let luxId = sessionCounters[sessionId]++;
-    const luxCollection = db.collection(sessionId);
-    luxCollection.doc(luxId.toString()).set({
-        lightValue, // Assuming you want to store the light value in Firestore. Replace `lightValue` with the actual data object if different
-        // Add server-generated timestamp
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
-    })
-        .then(() => console.log('Data was added to Firestore successfully.'))
-        .catch((error) => console.error('Error adding document to Firestore:', error));
+    // Use the counter as the document ID
+    const docRef = db.collection('lightValues').doc(`${counter}`);
+    await docRef.set({ value: lightValue, timestamp: admin.firestore.FieldValue.serverTimestamp() });
 
-    // Removed the extra closing brace from here
+    // Increment the counter for the next document
+    await counterRef.set({ count: counter + 1 });
+
+    res.status(200).send(`Light value received and stored in Firebase with ID: ${counter}`);
 });
+
+
 
 // GET route to display the stored light values
 app.get('/light-values', async (req, res) => {
@@ -48,6 +49,8 @@ app.get('/light-values', async (req, res) => {
     });
     res.status(200).json(lightValues);
 });
+
+
 
 // Route to handle GET requests to the root URL path
 app.get('/', (req, res) => {
